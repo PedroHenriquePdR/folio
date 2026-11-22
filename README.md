@@ -3,6 +3,8 @@
 A fast, clean PDF reader for Windows, macOS, and Linux. Read, highlight, annotate, sign, and ask AI about your
 documents. Free and open source, with no Folio account required.
 
+Nesta branch do fork, a versão desktop permite testar a assinatura de PDFs com um A1 já instalado. [Executar o fork e assinar com ICP-Brasil](docs/assinatura-icp-brasil.md)
+
 ![Folio with the Ask AI panel open, answering a question about the document with page citations](docs/screenshots/ask-ai.png)
 
 | Highlights and notes | Search |

@@ -9,12 +9,16 @@
     "prebuild": "npm run assets",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:certsign": "node scripts/build-certificate-signer.mjs",
+    "test:certsign": "node scripts/build-certificate-signer.mjs --test",
     "preview": "vite preview",
+    "preapp": "npm run build:certsign",
     "app": "npm run build && electron .",
     "dist:win": "npm run build && electron-builder --win nsis portable",
     "release": "node scripts/release.mjs",
     "dist:mac": "npm run build && electron-builder --mac --publish never",
     "dist:linux": "npm run build && electron-builder --linux --publish never",
+    "presmoke": "npm run build:certsign",
     "smoke": "node scripts/smoke-test.mjs && node scripts/test-print.mjs && node scripts/smoke-print.mjs && node scripts/smoke-print-resolution.mjs",
     "test": "vitest run",
     "test:reader-security": "node scripts/test-reader-security.mjs && node scripts/test-url-client-certificates.mjs",
@@ -22,6 +26,8 @@
     "test:thumbnails": "node scripts/test-thumbnails.mjs"
   },
   "dependencies": {
+    "@libpdf/core": "0.5.3",
+    "@xmldom/xmldom": "0.8.15",
     "electron-updater": "^6.8.11",
     "jszip": "^3.10.2",
     "mammoth": "^1.13.0"
@@ -41,8 +47,8 @@
     "electron": "^45.2.3",
     "electron-builder": "^26.18.0",
     "fake-indexeddb": "^6.2.7",
-    "jsdom": "^29.1.1",
     "idb-keyval": "^6.3.0",
+    "jsdom": "^29.1.1",
     "katex": "^0.19.1",
     "mdast-util-from-markdown": "^2.1.0",
     "pdf-lib": "1.17.1",
@@ -70,6 +76,7 @@
   "build": {
     "appId": "app.folio.reader",
     "productName": "Folio",
+    "beforePack": "./scripts/build-certificate-signer.mjs",
     "electronLanguages": [
       "en-US"
     ],
@@ -121,6 +128,14 @@
     ],
     "extraResources": [
       {
+        "from": "native-bin/pack/${os}/${arch}",
+        "to": "certsign",
+        "filter": [
+          "folio-certsign",
+          "folio-certsign.exe"
+        ]
+      },
+      {
         "from": "LICENSE",
         "to": "LICENSE.txt"
       },
@@ -131,6 +146,27 @@
       {
         "from": "dist/.vite/license.md",
         "to": "licenses/THIRD_PARTY_LICENSES.md"
+      },
+      {
+        "from": "build/certsign-licenses.txt",
+        "to": "licenses/certsign-licenses.txt"
+      },
+      {
+        "from": "node_modules",
+        "to": "licenses/certificate-pdf",
+        "filter": [
+          "@libpdf/core/LICENSE.md",
+          "@noble/{ciphers,hashes}/LICENSE",
+          "@scure/base/LICENSE",
+          "@xmldom/xmldom/LICENSE",
+          "{asn1js,bytestreamjs,pkijs,pvtsutils,pvutils}/LICENSE",
+          "tslib/{CopyrightNotice,LICENSE}.txt"
+        ]
+      },
+      {
+        "from": "node_modules/@libpdf/core/node_modules",
+        "to": "licenses/certificate-pdf/@libpdf/core/node_modules",
+        "filter": ["{@noble/hashes,lru-cache,pako}/LICENSE*"]
       }
     ],
     "electronFuses": {

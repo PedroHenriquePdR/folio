@@ -37,6 +37,7 @@ import { AiPanel, forgetClearedChats, type AiContext } from "./AiPanel";
 import { ZoomMenu } from "./ZoomMenu";
 import { SearchBar, type FindResult } from "./SearchBar";
 import { AboutDialog, InfoDialog, OpenUrlDialog, PasswordDialog, ShortcutsDialog, parseWebUrl } from "./Dialogs";
+import { CertificateSigningDialog } from "./CertificateSigningDialog";
 import { SignatureDialog } from "./SignatureDialog";
 import { newImageDraft, type ImageDraft } from "./ImagePlacement";
 import { ContentEditor, type ContentEditorHandle, type NextSelection } from "./ContentEditor";
@@ -244,7 +245,7 @@ export default function App({ tabs, tabKey, upgradeNotes }: { tabs: DocumentTabs
   const [printCopy, setPrintCopy] = useState<{ pdf: PDFDocumentProxy; bytes: Uint8Array; page: number; name: string } | null>(null);
   const preparingPrint = useRef(false);
   useEffect(() => () => { if (printCopy) void printCopy.pdf.loadingTask.destroy(); }, [printCopy]);
-  const [dialog, setDialog] = useState<"info" | "shortcuts" | "about" | "url" | "settings" | "ai-settings" | "changelog" | "upgrade" | null>(
+  const [dialog, setDialog] = useState<"info" | "certificate" | "shortcuts" | "about" | "url" | "settings" | "ai-settings" | "changelog" | "upgrade" | null>(
     upgradeNotes.length ? "upgrade" : null);
   // A pasted or dropped link waits in Open from URL, so the user sees where it goes before Folio contacts it.
   const [linkDraft, setLinkDraft] = useState("");
@@ -1210,7 +1211,7 @@ export default function App({ tabs, tabKey, upgradeNotes }: { tabs: DocumentTabs
         }
         return;
       }
-      if (printCopy) {
+      if (printCopy || dialog === "certificate") {
         if ((e.ctrlKey || e.metaKey) && ["p", "o", "w", "t", "s", ",", "tab"].includes(e.key.toLowerCase())) e.preventDefault();
         return;
       }
@@ -1474,6 +1475,8 @@ export default function App({ tabs, tabKey, upgradeNotes }: { tabs: DocumentTabs
                     { kind: "action", icon: "close", label: "Close document", shortcut: keys("Ctrl W"), onSelect: () => void tabs.close(tabKey) },
                     { kind: "divider" },
                     { kind: "action", icon: "download", label: "Save a copy", shortcut: keys("Ctrl S"), onSelect: download },
+                    ...(window.folioDesktop?.certificates ? [{ kind: "action", icon: "signature", label: "Sign with a certificate",
+                      onSelect: () => setDialog("certificate") }] : []),
                     { kind: "action", icon: "history", label: "Version history", onSelect: () => { setAiOpen(false); setHistoryOpen(true); } },
                     { kind: "action", icon: "print", label: "Print", shortcut: keys("Ctrl P"), onSelect: print },
                     { kind: "action", icon: "info", label: "Document info", onSelect: () => setDialog("info") },
@@ -1739,6 +1742,16 @@ export default function App({ tabs, tabKey, upgradeNotes }: { tabs: DocumentTabs
           onCancel={() => { setPending(null); tabs.failed(tabKey); }}
         />
       )}
+      {dialog === "certificate" && doc && active && window.folioDesktop?.certificates &&
+        <CertificateSigningDialog key={doc.pdf.loadingTask.docId} store={window.folioDesktop.certificates} name={doc.name}
+          blocked={doc.password ? "This PDF is encrypted. Open an unencrypted copy to sign it."
+            : doc.sourceId || organized || editorDirty || imageDraft ? "Save your edits as a copy and reopen it before signing." : undefined}
+          snapshot={async () => (await currentBytes(doc, []))?.bytes}
+          onSigned={bytes => {
+            saveBlob(pdfBlob(bytes), doc.name.replace(/\.pdf$/i, "") + " (signed).pdf");
+            flash("Signed copy ready");
+            setDialog(null);
+          }} onClose={() => setDialog(null)} />}
       {dialog === "info" && doc && <InfoDialog key={doc.pdf.loadingTask.docId} pdf={doc.pdf} name={doc.name} size={doc.size} onClose={() => setDialog(null)} />}
       {printCopy && <PrintDialog pdf={printCopy.pdf} currentPage={printCopy.page} name={printCopy.name}
         onPrint={() => { printPdfBytes(printCopy.bytes); setPrintCopy(null); }} onClose={() => setPrintCopy(null)} />}

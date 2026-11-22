@@ -6,8 +6,17 @@ interface UpdateStatus {
   checkedAt?: number;
 }
 
+interface SigningCertificate { id: string; holder: string; issuer: string; validUntil: string }
+interface CertificateStore {
+  list(password?: string): Promise<{ certificates: SigningCertificate[] } | { error: string }>;
+  sign(request: { requestId: string; id: string; data: Uint8Array; name: string; password?: string }):
+    Promise<{ bytes: Uint8Array } | { cancelled: true } | { error: string }>;
+  cancel(requestId: string): Promise<boolean>;
+}
+
 // Present only when Folio runs as the desktop app (see electron/preload.cjs).
 interface FolioDesktop {
+  certificates: CertificateStore;
   getPrinters(): Promise<{ name: string; displayName: string; isDefault: boolean }[]>;
   printSheets(job: { images: string[]; paper: "Letter" | "A4" | "Legal"; landscape: boolean; dpi: 150 | 300 | 600;
     copies: number; printer: string; booklet: boolean }): Promise<{ ok: boolean; error?: string }>;

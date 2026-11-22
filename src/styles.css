@@ -1692,3 +1692,15 @@ kbd {
 .image-corner.nw, .image-corner.se { cursor: nwse-resize; }
 .image-corner.ne, .image-corner.sw { cursor: nesw-resize; }
 .folio-place-actions { position: absolute; z-index: 11; left: 50%; bottom: 76px; transform: translateX(-50%); display: flex; gap: 6px; padding: 5px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); box-shadow: var(--shadow-sm); }
+
+.certificate-form fieldset {
+  margin: 0; padding: 0; border: 0; max-height: 40vh; overflow: auto;
+}
+.certificate-choice {
+  display: flex; align-items: center; gap: 10px; cursor: pointer;
+  padding: 8px; border-bottom: 1px solid var(--line);
+}
+.certificate-choice > input { width: 18px; height: 18px; flex: none; accent-color: var(--accent); }
+.certificate-choice span { min-width: 0; overflow-wrap: anywhere; }
+.certificate-choice small { display: block; color: var(--text-2); }
+.certificate-form legend { padding: 0 0 5px; font-size: 13px; color: var(--text-2); }

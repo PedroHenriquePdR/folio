@@ -28,6 +28,11 @@ they cover, and Electron's and Chromium's licenses are in the app's installation
 | Chromium (bundled with Electron) | BSD-3-Clause and others | The Chromium Authors |
 | [electron-updater](https://github.com/electron-userland/electron-builder) and its dependencies | MIT, ISC, BlueOak-1.0.0, Python-2.0 | electron-builder contributors and others |
 | [mammoth](https://github.com/mwilliamson/mammoth.js) (Word document conversion) and its dependencies | BSD-2-Clause, MIT, ISC, Zlib, Python-2.0; JSZip under MIT (of MIT OR GPL-3.0-or-later) | Michael Williamson and others |
+| [LibPDF](https://github.com/LibPDF-js/core), [xmldom](https://github.com/xmldom/xmldom) e suas dependências (preparação de PDFs para assinatura) | MIT, BSD-3-Clause, BlueOak-1.0.0, Zlib e 0BSD | Lucas Smith e colaboradores de cada biblioteca |
+| [Go](https://go.dev), [go-certstore](https://github.com/sukujgrg/go-certstore), [smimesign](https://github.com/github/smimesign) e [pkcs11](https://github.com/miekg/pkcs11) (assinatura com certificados locais) | BSD-3-Clause e MIT | The Go Authors, os autores de go-certstore e smimesign, Miek Gieben e OASIS Open |
+
+As licenças das bibliotecas JavaScript usadas para preparar a assinatura acompanham o aplicativo em
+`licenses/certificate-pdf/`. As licenças e os avisos do executável de assinatura estão em `licenses/certsign-licenses.txt`.
 
 The sample document (`public/sample.pdf`) was written for Folio and is covered by Folio's MIT License.
 

@@ -23,7 +23,26 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: native/certsign/go.mod
+          cache-dependency-path: native/certsign/go.sum
       - run: npm ci
+      - name: Install tools for the isolated NSS test database
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libnss3-tools openssl
+      - name: Use OpenSSL from Homebrew
+        if: runner.os == 'macOS'
+        run: echo "$(brew --prefix openssl@3)/bin" >> "$GITHUB_PATH"
+      - run: npm run test:certsign
+      - run: node --test scripts/test-certificate-signing.cjs scripts/test-certificate-pdf.cjs
+      - run: npm run build:certsign
+      - name: Sign a PDF with a generated identity in the system certificate store
+        env:
+          FOLIO_TEST_SIGNING_IDENTITY: "1"
+        run: node --test scripts/test-certificate-nss.cjs
       # Everything, not --omit=dev: the libraries bundled into the app (pdf.js, KaTeX, the Markdown and OCR
       # code) and Electron itself are devDependencies here, so leaving them out audits almost nothing that ships.
       - run: npm audit --audit-level=high
@@ -34,6 +53,18 @@ jobs:
       - run: node --test scripts/test-link-history.mjs scripts/test-text-direction.mjs
       - run: node --test scripts/test-openrouter.cjs scripts/test-custom-endpoint.cjs
       - run: npm run build
+      - name: Verify the universal macOS certificate signer
+        if: runner.os == 'macOS' && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/ci/')
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          output=$(mktemp -d "$RUNNER_TEMP/folio-ci-universal.XXXXXX")
+          npx --no-install electron-builder --mac --universal --dir --publish never -c.directories.output="$output"
+          bundle="$output/mac-universal/Folio.app"
+          signer="$bundle/Contents/Resources/certsign/folio-certsign"
+          lipo -verify_arch x86_64 arm64 "$signer"
+          node scripts/build-certificate-signer.mjs --check "$signer"
+          codesign --verify --deep --verbose=2 "$bundle"
       - name: Browser Edition link shortcuts
         run: |
           npx --no-install playwright-core install chromium --only-shell

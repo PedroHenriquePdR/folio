@@ -12,6 +12,7 @@ const { guardSession, resolveDestination } = require("./network.cjs");
 const { safePdfName } = require("./filenames.cjs");
 const { csp } = require("./csp.cjs");
 const { WORD_FILE, openWord } = require("./convert.cjs");
+const { registerCertificateSigning } = require("./certificate-signing.cjs");
 const { registerPrinting } = require("./printing.cjs");
 const { MAX_DOCUMENT_BYTES, checkDiskPath, readRegular } = require("./document-files.cjs");
 
@@ -563,6 +564,7 @@ if (!app.requestSingleInstanceLock()) {
 
     ai.register(handle, (channel, payload) => win?.webContents.send(channel, payload), { confirmLocal: (url, addresses) => confirmLocalAddress(url, addresses) });
     registerPrinting(handle, () => win);
+    registerCertificateSigning(handle, () => win);
 
     handle("folio:ready", () => {
       rendererReady = true;

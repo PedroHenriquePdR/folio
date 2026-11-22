@@ -14,6 +14,7 @@ import assert from "node:assert/strict";
 import { electronPath } from "./electron-path.mjs";
 import { readerPage } from "./reader-page.mjs";
 import { checkReaderTools } from "./smoke-reader-tools.mjs";
+import { checkCertificateSigning } from "./smoke-certificate-signing.mjs";
 import { checkSignatureTargets } from "./smoke-signature-targets.mjs";
 import { checkOpenRouter } from "./smoke-openrouter.mjs";
 import { checkCustomEndpoint } from "./smoke-custom-endpoint.mjs";
@@ -110,6 +111,7 @@ try {
   await page.locator(".textLayer span:not(.markedContent)").first().waitFor({ timeout: 30_000 });
   assert.match(await page.locator(".textLayer").first().innerText(), /A short tour of Folio/);
   console.log("ok  sample rendered with a text layer");
+  await checkCertificateSigning(app, page, env.FOLIO_TEST_USER_DATA);
 
   // The list of matching pages quotes each page's first match. The words it marks are the ones searched for,
   // also when the match sits many lines down the page. (Text with ligatures is checked at the end.)

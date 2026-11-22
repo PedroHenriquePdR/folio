@@ -2,6 +2,11 @@
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 contextBridge.exposeInMainWorld("folioDesktop", {
+  certificates: {
+    list: (password) => ipcRenderer.invoke("folio:certificates-list", password),
+    sign: (request) => ipcRenderer.invoke("folio:certificates-sign", request),
+    cancel: (requestId) => ipcRenderer.invoke("folio:certificates-cancel", requestId),
+  },
   getPrinters: () => ipcRenderer.invoke("folio:printers"),
   printSheets: (job) => ipcRenderer.invoke("folio:print-sheets", job),
   /** Called with (name, data, note?) whenever a PDF is opened from Explorer, or a Word document has been converted. */
