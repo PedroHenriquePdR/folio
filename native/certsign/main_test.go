@@ -47,9 +47,12 @@ func (s testStore) Close()                                                   {}
 func (s testStore) open(context.Context, string) (certstore.Store, error)    { return s, nil }
 
 type testReply struct {
-	Certificates []struct{ ID, Holder, Issuer, ValidUntil string }
-	CMS          []byte
-	Error        string
+	Certificates []struct {
+		ID, Holder, Issuer, ValidUntil, StampName string
+		TaxID                                     json.RawMessage `json:"taxId"`
+	}
+	CMS   []byte
+	Error string
 }
 
 func invoke(t *testing.T, input io.Reader, open func(context.Context, string) (certstore.Store, error)) testReply {

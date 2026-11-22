@@ -14,8 +14,10 @@ Na versão desktop deste fork, o Folio usa um A1 ICP-Brasil já instalado para g
 
 1. Abra um PDF no Folio para desktop e escolha **More → Sign with a certificate**.
 2. Se o banco NSS pedir a senha, informe a senha desse banco. Selecione o certificado pelo titular, emissor e vencimento.
-3. Clique em **Sign copy**, confira o nome do documento e a identidade na confirmação do sistema e confirme a assinatura.
-4. O Folio gera um arquivo com o sufixo `(signed).pdf`. Guarde essa cópia para apresentar ou validar a assinatura.
+3. O selo visível vem ativado. Na prévia, escolha a página e clique onde deseja colocá-lo. Para mudar a posição, clique em outro ponto ou use as setas com a prévia em foco. O controle de tamanho ajusta a área do selo. Para assinar sem marca na página, desmarque a opção de selo visível.
+4. Clique em **Sign copy**. Confira o documento, o certificado e a página na confirmação do sistema. Ao confirmar, o Folio gera uma cópia com o sufixo `(signed).pdf`.
+
+O selo aparece no PDF e na impressão. Ele exibe o nome do titular e o horário da assinatura com o fuso. Se o A1 identificar o documento do titular de forma inequívoca, o selo também exibirá o CPF completo da pessoa física ou o CNPJ completo da empresa. Esse dado ficará visível para quem receber a cópia. A aparência faz parte do conteúdo protegido pela assinatura digital. Se a fonte do selo não contiver um caractere do nome, o Folio permite prosseguir com a opção de assinatura sem selo.
 
 Esta primeira versão acrescenta a primeira assinatura digital ao documento. O PDF mantém o conteúdo original e recebe uma revisão que contém a assinatura. Formulários comuns e anotações são preservados. Para reorganização de páginas, edição do conteúdo ou inclusão de texto pesquisável gerado por OCR, use **Save a copy** e reabra a cópia antes de assinar. Documentos já assinados, criptografados, PDF/A-1 e formulários XFA ou com requisitos de assinatura específicos ficam fora desse fluxo. A assinatura digital pode ser conferida mesmo sem marca visível na página.
 

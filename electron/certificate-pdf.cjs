@@ -12,6 +12,8 @@ const messages = {
   pdf_a1: "PDF/A-1 does not support this signature. Choose a PDF/A-2 or later copy.",
   pdf_unsupported: "Folio cannot add a first signature to this PDF format.",
   pdf_signature_failed: "Folio could not prepare the PDF signature.",
+  invalid_placement: "Choose a position and size that fit the page.",
+  stamp_glyph: "This font cannot display the holder's name. Turn off the visible stamp to sign.",
   cms_size: "The CMS signature is empty or exceeds 32 KiB.",
 };
 
@@ -85,7 +87,7 @@ function unsignedForm(pdf, current) {
   const fields = form && entry(form, "Fields", "array", resolve);
   if (form && !fields) fail("pdf_invalid");
   const fieldName = inspectFields(fields ?? [], pages, resolve, current);
-  return { resolve, catalog, first: pages[0], form, fields, fieldName };
+  return { resolve, catalog, pages, form, fields, fieldName };
 }
 
 function startXref(bytes) {
@@ -162,7 +164,7 @@ function reserve(syntax) {
   };
 }
 
-async function prepareCertificatePdf(bytes) {
+async function prepareCertificatePdf(bytes, appearance) {
   if (!(bytes instanceof Uint8Array) || bytes.length < PDF_HEADER.length) fail("pdf_invalid");
   const storage = Buffer.allocUnsafe(bytes.length + 64);
   const original = storage.subarray(0, bytes.length);
@@ -172,14 +174,15 @@ async function prepareCertificatePdf(bytes) {
   try {
     const pdf = await PDF.load(original, { lenient: false });
     const unsigned = unsignedForm(pdf, true);
-    const { resolve, catalog, first, fieldName } = unsigned;
+    const { resolve, catalog, pages, fieldName } = unsigned;
     if (pdf.canSaveIncrementally()) fail("pdf_unsupported");
     await checkHistory(pdf, original, storage, PDF, PdfRef);
     checkArchivalMetadata(catalog, resolve);
+    const mark = appearance === undefined ? undefined
+      : await require("./certificate-appearance.cjs").prepareAppearance(pdf, pages, appearance, fail);
+    const page = mark?.page ?? pages[0];
     const form = unsigned.form ?? new PdfDict();
-    const fields = unsigned.fields ?? new PdfArray();
     if (!unsigned.form) {
-      form.set("Fields", fields);
       catalog.set("AcroForm", pdf.register(form));
     }
 
@@ -211,26 +214,26 @@ async function prepareCertificatePdf(bytes) {
     }));
     const range = reserve(EMPTY_RANGE);
     const contents = reserve(EMPTY_CONTENTS);
-    const date = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "");
+    const date = (appearance?.signedAt ?? new Date().toISOString()).slice(0, 19).replace(/[-:T]/g, "");
     const signature = pdf.register(PdfDict.of({
       Type: PdfName.of("Sig"), Filter: PdfName.of("PBAD_PAdES"), SubFilter: PdfName.of("PBAD.PAdES"),
       M: PdfString.fromString(`D:${date}Z`), Reference: PdfArray.of(reference), ByteRange: range, Contents: contents,
     }));
-    const zero = PdfNumber.of(0);
     const widget = pdf.register(PdfDict.of({
       Type: PdfName.of("Annot"), Subtype: PdfName.of("Widget"), FT: PdfName.of("Sig"),
-      T: PdfString.fromString(fieldName), V: signature, P: first.ref,
-      Rect: PdfArray.of(zero, zero, zero, zero), F: PdfNumber.of(132),
+      T: PdfString.fromString(fieldName), V: signature, P: page.ref,
+      Rect: new PdfArray((mark?.rect ?? [0, 0, 0, 0]).map(PdfNumber.of)), F: PdfNumber.of(132),
+      ...(mark ? { AP: PdfDict.of({ N: mark.normal }) } : {}),
     }));
-    fields.push(widget);
+    // Independent lists preserve PDFs that share an indirect array between pages or with the field tree.
+    form.set("Fields", new PdfArray([...(unsigned.fields ?? []), widget]));
     const flags = entry(form, "SigFlags", "number", resolve)?.value ?? 0;
     if (!Number.isInteger(flags) || flags < 0 || flags > 0x7fffffff) fail("pdf_invalid");
     form.set("SigFlags", PdfNumber.of(flags | 3));
-    const annots = entry(first.dict, "Annots", "array", resolve);
-    if (annots) annots.push(widget);
-    else first.dict.set("Annots", PdfArray.of(widget));
+    const annots = entry(page.dict, "Annots", "array", resolve);
+    page.dict.set("Annots", new PdfArray([...(annots ?? []), widget]));
 
-    const saved = await pdf.save({ incremental: true });
+    const saved = await pdf.save({ incremental: true, subsetFonts: true });
     const prepared = Buffer.from(saved.buffer, saved.byteOffset, saved.byteLength);
     const start = contents.offset;
     const end = start + EMPTY_CONTENTS.length;

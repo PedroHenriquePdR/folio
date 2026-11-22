@@ -6,10 +6,12 @@ interface UpdateStatus {
   checkedAt?: number;
 }
 
-interface SigningCertificate { id: string; holder: string; issuer: string; validUntil: string }
+interface CertificateTaxId { type: "CPF" | "CNPJ"; value: string }
+interface SigningCertificate { id: string; holder: string; issuer: string; validUntil: string; stampName: string; taxId?: CertificateTaxId }
+interface CertificatePlacement { pageNumber: number; rect: [number, number, number, number] }
 interface CertificateStore {
   list(password?: string): Promise<{ certificates: SigningCertificate[] } | { error: string }>;
-  sign(request: { requestId: string; id: string; data: Uint8Array; name: string; password?: string }):
+  sign(request: { requestId: string; id: string; data: Uint8Array; name: string; password?: string; placement?: CertificatePlacement }):
     Promise<{ bytes: Uint8Array } | { cancelled: true } | { error: string }>;
   cancel(requestId: string): Promise<boolean>;
 }

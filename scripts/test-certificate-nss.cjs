@@ -6,7 +6,7 @@ const path = require("node:path");
 const os = require("node:os");
 const { X509Certificate } = require("node:crypto");
 const { execFileSync, spawnSync } = require("node:child_process");
-const { PDFDocument, PDFName, PDFDict, PDFArray, PDFHexString } = require("pdf-lib");
+const { PDFDocument, PDFName, PDFDict, PDFArray, PDFHexString, PDFRawStream, degrees } = require("pdf-lib");
 const { createCertificateService, runCertificateHelper } = require("../electron/certificate-signing.cjs");
 
 const linux = process.platform === "linux";
@@ -25,6 +25,7 @@ test("an imported software A1 signs PDF byte ranges that OpenSSL verifies indepe
   const run = (tool, args) => execFileSync(tool, args, { cwd: profile, env, stdio: "pipe" });
   run("openssl", ["req", "-new", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2", "-subj", "/CN=Folio A1 Test",
     "-addext", "basicConstraints=critical,CA:FALSE", "-addext", "keyUsage=critical,digitalSignature,nonRepudiation",
+    "-addext", "subjectAltName=otherName:2.16.76.1.3.1;OCTETSTRING:010119901234567890900000000000000000000000000000000",
     "-addext", "certificatePolicies=2.16.76.1.2.1.99", "-keyout", "test.key", "-out", "test.pem"]);
   const pkcs12 = ["pkcs12", "-export", "-out", "test.p12", "-inkey", "test.key", "-in", "test.pem", "-passout", "file:password"];
   // Apple's legacy PKCS#12 importer expects this encoding of the disposable test credential.
@@ -54,19 +55,29 @@ test("an imported software A1 signs PDF byte ranges that OpenSSL verifies indepe
   if (linux) assert.equal(result.certificates.length, 1);
   const certificate = new X509Certificate(fs.readFileSync(file("test.pem")));
   const id = certificate.fingerprint256.replaceAll(":", "").toLowerCase();
-  assert.ok(result.certificates.some(cert => cert.id === id && cert.holder === "Folio A1 Test"), "the imported identity is selectable");
+  const identity = result.certificates.find(cert => cert.id === id);
+  assert.equal(identity?.stampName, "Folio A1 Test");
+  assert.deepEqual(identity.taxId, { type: "CPF", value: "123.456.789-09" });
 
   const source = await PDFDocument.create();
   source.addPage([100, 150]).drawText("Folio test");
+  const page = source.addPage([420, 520]);
+  page.setCropBox(20, 40, 380, 440);
+  page.setRotation(degrees(90));
   const original = Buffer.from(await source.save());
-  const request = { requestId: "nss-e2e", id, name: "test.pdf", password: secret, data: original };
+  const placement = { pageNumber: 2, rect: [90, 110, 172, 340] };
+  const request = { requestId: "nss-e2e", id, name: "test.pdf", password: secret, data: original, placement };
   const signed = await service.sign(request);
   assert.ok(signed.bytes, JSON.stringify({ error: signed.error, cancelled: signed.cancelled }));
   const output = Buffer.from(signed.bytes);
   assert.deepEqual(output.subarray(0, original.length), original);
   const pdf = await PDFDocument.load(output);
   const key = PDFName.of;
+  assert.equal(pdf.getForm().getFields().length, 1);
   const [field] = pdf.getForm().getFields();
+  assert.equal(field.acroField.dict.get(key("P")).toString(), pdf.getPages()[1].ref.toString());
+  assert.deepEqual(field.acroField.dict.lookup(key("Rect"), PDFArray).asArray().map(n => n.asNumber()), placement.rect);
+  const normal = field.acroField.dict.lookup(key("AP"), PDFDict).lookup(key("N"), PDFRawStream);
   const sig = field.acroField.dict.lookup(key("V"), PDFDict);
   const range = sig.lookup(key("ByteRange"), PDFArray).asArray().map(n => n.asNumber());
   assert.equal(range[0], 0);
@@ -85,10 +96,24 @@ test("an imported software A1 signs PDF byte ranges that OpenSSL verifies indepe
   const args = ["cms", "-verify", "-binary", "-inform", "DER", "-in", "cms.der", "-content", "covered.pdf",
     "-nointern", "-certfile", "test.pem", "-noverify", "-out", os.devNull];
   run("openssl", args);
-  covered[4] ^= 1;
+  // Change a byte inside the actual widget appearance, after locating its serialized stream independently.
+  const streamBytes = Buffer.from(normal.getContents());
+  assert.ok(streamBytes.length > 8);
+  const appearanceOffset = covered.indexOf(streamBytes);
+  assert.ok(appearanceOffset >= original.length);
+  assert.equal(covered.indexOf(streamBytes, appearanceOffset + 1), -1);
+  covered[appearanceOffset + Math.floor(streamBytes.length / 2)] ^= 1;
   fs.writeFileSync(file("covered.pdf"), covered);
   const tampered = spawnSync("openssl", args, { cwd: profile, env, encoding: "utf8" });
   assert.notEqual(tampered.status, 0);
   assert.match(tampered.stderr, /verification failure|verification error/i);
   assert.deepEqual(await service.sign({ ...request, data: output }), { error: "pdf_already_signed" });
+
+  const hidden = await service.sign({ ...request, placement: undefined });
+  assert.ok(hidden.bytes, JSON.stringify({ error: hidden.error, cancelled: hidden.cancelled }));
+  const withoutMark = await PDFDocument.load(hidden.bytes);
+  const [hiddenField] = withoutMark.getForm().getFields();
+  assert.equal(hiddenField.constructor.name, "PDFSignature");
+  assert.deepEqual(hiddenField.acroField.dict.lookup(key("Rect"), PDFArray).asArray().map(n => n.asNumber()), [0, 0, 0, 0]);
+  assert.equal(hiddenField.acroField.dict.has(key("AP")), false);
 });

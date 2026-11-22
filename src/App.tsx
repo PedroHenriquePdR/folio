@@ -1744,9 +1744,10 @@ export default function App({ tabs, tabKey, upgradeNotes }: { tabs: DocumentTabs
       )}
       {dialog === "certificate" && doc && active && window.folioDesktop?.certificates &&
         <CertificateSigningDialog key={doc.pdf.loadingTask.docId} store={window.folioDesktop.certificates} name={doc.name}
+          pdf={doc.pdf} currentPage={page}
           blocked={doc.password ? "This PDF is encrypted. Open an unencrypted copy to sign it."
             : doc.sourceId || organized || editorDirty || imageDraft ? "Save your edits as a copy and reopen it before signing." : undefined}
-          snapshot={async () => (await currentBytes(doc, []))?.bytes}
+          snapshot={() => currentBytes(doc, [])}
           onSigned={bytes => {
             saveBlob(pdfBlob(bytes), doc.name.replace(/\.pdf$/i, "") + " (signed).pdf");
             flash("Signed copy ready");

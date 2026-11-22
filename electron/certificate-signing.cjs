@@ -8,10 +8,25 @@ const ID = /^[0-9a-f]{64}$/;
 const fail = code => Object.assign(new Error(code), { code });
 const errors = new Set(["invalid_request", "unavailable", "no_store", "password_required", "certificate_unavailable",
   "sign_failed", "pdf_invalid", "pdf_encrypted", "pdf_already_signed", "pdf_restricted_field", "pdf_a1", "pdf_xfa",
-  "pdf_unsupported", "pdf_signature_failed", "cms_size"]);
+  "pdf_unsupported", "pdf_signature_failed", "cms_size", "invalid_placement", "stamp_glyph"]);
 const errorCode = code => errors.has(code) ? code : "sign_failed";
 const validPassword = password => password === undefined || (typeof password === "string" && Buffer.byteLength(password) <= 1024 && !password.includes("\0"));
 const displayText = value => typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, " ").trim().slice(0, 256) : "";
+
+function validPlacement(value) {
+  if (!value || !Number.isSafeInteger(value.pageNumber) || value.pageNumber < 1) return false;
+  const r = value.rect;
+  return Array.isArray(r) && r.length === 4 && r.every(Number.isFinite) && r[0] < r[2] && r[1] < r[3];
+}
+
+function publicIdentity(cert) {
+  const taxId = cert.taxId;
+  const formats = { CPF: /^\d{3}\.\d{3}\.\d{3}-\d{2}$/, CNPJ: /^[A-Z0-9]{2}\.[A-Z0-9]{3}\.[A-Z0-9]{3}\/[A-Z0-9]{4}-\d{2}$/ };
+  const hasTaxId = taxId && Object.hasOwn(formats, taxId.type) && typeof taxId.value === "string" && formats[taxId.type].test(taxId.value);
+  return { id: cert.id, holder: displayText(cert.holder), issuer: displayText(cert.issuer), validUntil: cert.validUntil,
+    stampName: displayText(cert.stampName) || "Titular do certificado",
+    ...(hasTaxId ? { taxId: { type: taxId.type, value: taxId.value } } : {}) };
+}
 
 function runCertificateHelper(binary, header, data, signal, env = process.env) {
   signal?.throwIfAborted();
@@ -41,7 +56,7 @@ function runCertificateHelper(binary, header, data, signal, env = process.env) {
 }
 
 // Keep parsing and serializing the PDF off the UI thread. The PDF process never receives store credentials.
-function processCertificatePdf(bytes, sign, signal) {
+function processCertificatePdf(bytes, sign, signal, appearance) {
   signal.throwIfAborted();
   const script = path.join(__dirname, "certificate-pdf-worker.cjs");
   const utility = process.versions.electron && process.type === "browser";
@@ -78,7 +93,7 @@ function processCertificatePdf(bytes, sign, signal) {
         } else throw fail("pdf_signature_failed");
       } catch (error) { finish(error); }
     });
-    try { send({ pdf: bytes }); } catch (error) { finish(error); }
+    try { send({ pdf: bytes, appearance }); } catch (error) { finish(error); }
   });
 }
 
@@ -91,7 +106,7 @@ function createCertificateService({ run, confirm, processPdf = processCertificat
       if (result?.error) return { error: errorCode(result.error) };
       if (!Array.isArray(result?.certificates)) return { error: "sign_failed" };
       const certificates = result.certificates.filter(c => c && ID.test(c.id) && Date.parse(c.validUntil) > Date.now())
-        .map(c => ({ id: c.id, holder: displayText(c.holder), issuer: displayText(c.issuer), validUntil: c.validUntil }));
+        .map(publicIdentity);
       return { certificates };
     } catch (error) { return { error: errorCode(error?.code) }; }
   }
@@ -110,6 +125,7 @@ function createCertificateService({ run, confirm, processPdf = processCertificat
           !Buffer.from(input.data.buffer, input.data.byteOffset, Math.min(5, input.data.length)).equals(Buffer.from("%PDF-"))) {
         return { error: "invalid_request" };
       }
+      if (input.placement !== undefined && !validPlacement(input.placement)) return { error: "invalid_placement" };
       if (active) return { error: "busy" };
       const controller = new AbortController();
       const { signal } = controller;
@@ -117,14 +133,18 @@ function createCertificateService({ run, confirm, processPdf = processCertificat
       try {
         const bytes = Buffer.from(input.data);
         const { id, password } = input;
+        const placement = input.placement && { pageNumber: input.placement.pageNumber, rect: [...input.placement.rect] };
         const name = safePdfName(displayText(input.name), "document.pdf");
         const result = await list(password, signal);
         signal.throwIfAborted();
         if (result.error) return result;
         const cert = result.certificates.find(c => c.id === id);
         if (!cert) return { error: "certificate_unavailable" };
-        const confirmed = await confirm(name, cert, signal);
+        const confirmed = await confirm(name, cert, signal, placement);
         if (!confirmed || signal.aborted) return { cancelled: true };
+        const now = new Date();
+        const appearance = placement && { placement, holder: cert.stampName, taxId: cert.taxId,
+          signedAt: now.toISOString(), utcOffsetMinutes: -now.getTimezoneOffset() };
         const signed = await processPdf(bytes, async covered => {
           signal.throwIfAborted();
           const response = await run({ action: "sign", id, password }, covered, signal);
@@ -135,7 +155,7 @@ function createCertificateService({ run, confirm, processPdf = processCertificat
           const cms = Buffer.from(value, "base64");
           if (cms.length > MAX_CMS_BYTES || cms.toString("base64") !== value) throw fail("sign_failed");
           return cms;
-        }, signal);
+        }, signal, appearance);
         return signal.aborted ? { cancelled: true } : { bytes: signed };
       } catch (error) { return signal.aborted ? { cancelled: true } : { error: errorCode(error?.code) }; }
       finally { controller.abort(); active = undefined; }
@@ -148,11 +168,13 @@ function registerCertificateSigning(handle, getWindow, { app, dialog, runHelper 
   const binary = app.isPackaged ? path.join(process.resourcesPath, "certsign", filename) : path.join(__dirname, "..", "native-bin", filename);
   const service = createCertificateService({
     run: (header, data, signal) => runHelper(binary, header, data, signal),
-    confirm: async (name, cert, signal) => {
+    confirm: async (name, cert, signal, placement) => {
       const parent = getWindow();
       if (!parent || parent.isDestroyed()) return false;
+      const mark = placement ? `Visible signature on page ${placement.pageNumber}` : "Sign without a visible mark";
+      const identifier = placement && cert.taxId ? `\n${cert.taxId.type}: ${cert.taxId.value}` : "";
       const answer = await dialog.showMessageBox(parent, { type: "question", title: "Sign with a certificate",
-        message: `Sign a copy of “${name}”?`, detail: `Holder: ${cert.holder}\nIssuer: ${cert.issuer}\nSHA-256: ${cert.id}`,
+        message: `Sign a copy of “${name}”?`, detail: `Holder: ${cert.holder}\nIssuer: ${cert.issuer}\nSHA-256: ${cert.id}\n${mark}${identifier}`,
         buttons: ["Cancel", "Sign copy"], defaultId: 0, cancelId: 0, noLink: true, signal });
       return answer.response === 1;
     },

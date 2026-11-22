@@ -40,6 +40,8 @@ type certificateView struct {
 	Holder     string `json:"holder"`
 	Issuer     string `json:"issuer"`
 	ValidUntil string `json:"validUntil"`
+	StampName  string `json:"stampName"`
+	TaxID      *taxID `json:"taxId,omitempty"`
 }
 
 type response struct {
@@ -140,6 +142,7 @@ func handle(in io.Reader, open func(context.Context, string) (certstore.Store, e
 			certificates = append(certificates, certificateView{
 				ID: fingerprint, Holder: displayName(cert.Subject), Issuer: displayName(cert.Issuer),
 				ValidUntil: cert.NotAfter.UTC().Format(time.RFC3339),
+				StampName:  stampName(cert.Subject.CommonName), TaxID: holderTaxID(cert),
 			})
 		}
 	}
@@ -220,26 +223,9 @@ func documentUsage(cert *x509.Certificate) bool {
 func personalProfile(cert *x509.Certificate) bool {
 	// DOC-ICP-04 places this otherName on equipment/application certificates,
 	// which may share the A1 policy and clientAuth EKU with personal signers.
-	// Only inspect the type identifiers. The associated SAN values can be private.
-	for _, extension := range cert.Extensions {
-		if !extension.Id.Equal(asn1.ObjectIdentifier{2, 5, 29, 17}) {
-			continue
-		}
-		var names []asn1.RawValue
-		if rest, err := asn1.Unmarshal(extension.Value, &names); err != nil || len(rest) != 0 {
-			return false
-		}
-		for _, name := range names {
-			if name.Class != asn1.ClassContextSpecific || name.Tag != 0 {
-				continue
-			}
-			var kind asn1.ObjectIdentifier
-			if _, err := asn1.Unmarshal(name.Bytes, &kind); err != nil || kind.Equal(asn1.ObjectIdentifier{2, 16, 76, 1, 3, 8}) {
-				return false
-			}
-		}
-	}
-	return true
+	return allOtherNames(cert, func(kind asn1.ObjectIdentifier, _ []byte) bool {
+		return !kind.Equal(asn1.ObjectIdentifier{2, 16, 76, 1, 3, 8})
+	})
 }
 
 func signIdentity(ctx context.Context, id certstore.Identity, cert *x509.Certificate, digest []byte) response {
