@@ -8,7 +8,7 @@ O titular escolheu um selo textual, visível por padrão, com CPF ou CNPJ comple
 - [x] Montar a prévia sobre a página e converter a posição escolhida para as coordenadas do PDF. Conferir clique, setas, tamanho, rotação, troca de página e cancelamento.
 - [x] Vincular uma aparência imprimível ao próprio campo de assinatura antes de calcular os intervalos assinados. Preservar os bytes originais, as restrições de assinatura e a opção invisível.
 - [x] Conferir a integração e a integridade em um repositório NSS isolado. Alterar um byte da aparência e verificar a rejeição pelo OpenSSL.
-- [ ] Revisar o resultado, executar os testes e atualizar o pacote local do Ubuntu. Verificar a cópia assinada a partir do aplicativo instalado.
+- [x] Revisar o resultado, executar os testes e atualizar o pacote local do Ubuntu. Verificar a cópia assinada a partir do aplicativo instalado.
 
 ## Contratos
 
@@ -25,3 +25,7 @@ Uma comparação de pixels nas quatro rotações verificou a orientação das le
 A revisão independente identificou uma diferença entre um campo de formulário preenchido e sua prévia. O diálogo passou a usar os mesmos bytes para mostrar e assinar o documento. O teste incluiu o valor preenchido e uma nota em outra página. O cancelamento durante a preparação descartou a solicitação pendente.
 
 No Ubuntu passaram os 274 testes da aplicação, os 29 testes de PDF, serviço e integração, a suíte Go, a checagem de tipos, o build e o smoke completo. A verificação adicional em Chromium confrontou cada linha e posição vertical da prévia com a fonte usada para gravar o PDF. A suíte Go cobriu 45 cenários de identificação do titular. A compilação cruzada produziu o executável Windows x64.
+
+O APT atualizou o pacote local `folio-a1` para `1.16.1~a1.20261121.gbb824e45`. A verificação dos arquivos instalados e do atalho passou. No aplicativo instalado, uma identidade fictícia assinou uma cópia por meio da confirmação nativa. O teste reabriu a cópia no Folio, conferiu o CMS com a folha esperada no OpenSSL e comparou a posição do selo com o clique na segunda página girada. A renderização do Poppler e a impressão em PDF reproduziram o mesmo retângulo, preservando a primeira página.
+
+A tentativa de disparar a CI do fork retornou HTTP 422. O GitHub informou que o Actions está desativado para a conta. A execução nativa no Windows e no macOS e a conferência oficial com um A1 do titular continuam pendentes.
